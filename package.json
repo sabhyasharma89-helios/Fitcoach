@@ -15,7 +15,8 @@
     "test:e2e": "playwright test --trace off",
     "sync:exercises": "tsx scripts/sync-exercises.ts",
     "validate:exercises": "tsx scripts/validate-exercises.ts",
-    "cap:sync": "npm run build && npx cap sync android"
+    "cap:sync": "npm run build:android && npx cap sync android",
+    "build:android": "BUILD_TARGET=android npm run build"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",

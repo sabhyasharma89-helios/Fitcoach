@@ -14,7 +14,8 @@ import Progress from './pages/Progress';
 import More from './pages/More';
 import ExercisePage from './pages/ExercisePage';
 import Library from './pages/Library';
-import { autoSyncHealth } from './health/health';
+import { autoSyncHealth, isNative } from './health/health';
+import { PullToRefresh } from './components/PullToRefresh';
 
 const NAV = [
   { to: '/', label: 'Today', icon: 'M3 12l9-8 9 8M5 10v10h14V10' },
@@ -36,12 +37,20 @@ export default function App() {
       .catch((e) => setError(String(e?.message ?? e)));
   }, []);
 
+  useEffect(() => {
+    // re-sync when the app comes back to the foreground
+    const onVis = () => document.visibilityState === 'visible' && autoSyncHealth();
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   if (error) return <div className="p-6 text-bad">Could not open the local database: {error}</div>;
   if (!ready || !settings) return <div className="p-6 text-muted">Loading…</div>;
 
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col">
       <main className="flex-1 px-4 pb-28 pt-[calc(1rem+env(safe-area-inset-top))]">
+        <PullToRefresh enabled={isNative() && settings.healthConnectEnabled} onRefresh={autoSyncHealth}>
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/workout" element={<Workout />} />
@@ -53,6 +62,7 @@ export default function App() {
           <Route path="/exercise/:key" element={<ExercisePage />} />
           <Route path="*" element={<Today />} />
         </Routes>
+        </PullToRefresh>
       </main>
       <nav
         aria-label="Main"

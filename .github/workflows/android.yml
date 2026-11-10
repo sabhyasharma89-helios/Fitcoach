@@ -1,0 +1,68 @@
+name: Android APK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm test
+      - name: Build web assets for Android (also validates every exercise id)
+        run: npm run build:android
+      - run: npx cap sync android
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=build-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "name=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build debug APK
+        working-directory: android
+        env:
+          FITOS_VERSION_CODE: ${{ github.run_number }}
+          FITOS_VERSION_NAME: ${{ steps.v.outputs.name }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk "out/FitOS-${{ steps.v.outputs.name }}.apk"
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FitOS-${{ steps.v.outputs.name }}-apk
+          path: out/*.apk
+      - name: Attach APK to a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: FitOS ${{ steps.v.outputs.name }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          files: out/*.apk
+          body: |
+            Debug APK for sideloading on Android 8+ (built for the Galaxy S25 Ultra).
+            Install steps (including Samsung Auto Blocker) are in the README.
+            Every APK is signed with the same FitOS debug key, so it installs over the previous version and keeps your data.
