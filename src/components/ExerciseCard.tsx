@@ -13,7 +13,7 @@ export function targetText(p: Pick<PlannedExercise, 'sets' | 'reps' | 'unit' | '
         ? `${p.sets} × ${p.reps[0]}–${p.reps[1]} s`
         : `${p.sets} × ${p.reps[0]}–${p.reps[1]}`;
   if (p.unit === 'minutes') return reps;
-  const load = p.calibration ? ' · find your 10-rep load' : p.load != null ? ` · ${p.load} kg${p.perHand ? ' per hand' : ''}` : ' · bodyweight';
+  const load = p.calibration ? ' · calibrate' : p.load != null ? ` · ${p.load} kg${p.perHand ? ' per hand' : ''}` : ' · bodyweight';
   return reps + load;
 }
 

@@ -9,7 +9,8 @@ import { todayKey, WEEKDAYS, formatDay } from '../lib/date';
 import { fmtInt } from '../lib/format';
 import { EXERCISE_DB_SOURCE } from '../data/exerciseDb';
 import { FOOD_SOURCES } from '../food/foods';
-import { Button, Card, Field, H1, H2, Notice, inputCls } from '../components/ui';
+import { Button, Card, Field, H1, H2, Notice, Segmented, inputCls } from '../components/ui';
+import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { healthAvailability, isNative, openHealthSettings, requestHealthAccess, syncHealth } from '../health/health';
 
 export default function More() {
@@ -22,6 +23,7 @@ export default function More() {
       <Targets s={s} />
       <Schedule s={s} />
       {isNative() ? <HealthConnect s={s} /> : <WebHealthNote />}
+      <Appearance />
       <Backup s={s} />
       <About />
     </div>
@@ -222,6 +224,27 @@ function WebHealthNote() {
         A website can’t read Health Connect. In this web version, type steps in or import the Samsung Health CSV on the Log › Steps tab. Install the Android app
         (see README) for automatic syncing.
       </p>
+    </Card>
+  );
+}
+
+function Appearance() {
+  const [t, setT] = useState<Theme>(getTheme());
+  return (
+    <Card>
+      <H2>Appearance</H2>
+      <Segmented
+        name="Theme"
+        options={[
+          { value: 'dark', label: 'Dark' },
+          { value: 'light', label: 'Light' },
+        ]}
+        value={t}
+        onChange={(v) => {
+          setT(v);
+          setTheme(v);
+        }}
+      />
     </Card>
   );
 }

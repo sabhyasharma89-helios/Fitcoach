@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
@@ -7,13 +7,13 @@ import { todayKey } from './lib/date';
 import { Button } from './components/ui';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import Today from './pages/Today';
-import Workout from './pages/Workout';
-import Plan from './pages/Plan';
-import Log from './pages/Log';
-import Progress from './pages/Progress';
-import More from './pages/More';
-import ExercisePage from './pages/ExercisePage';
-import Library from './pages/Library';
+const Workout = lazy(() => import('./pages/Workout'));
+const Plan = lazy(() => import('./pages/Plan'));
+const Log = lazy(() => import('./pages/Log'));
+const Progress = lazy(() => import('./pages/Progress'));
+const More = lazy(() => import('./pages/More'));
+const ExercisePage = lazy(() => import('./pages/ExercisePage'));
+const Library = lazy(() => import('./pages/Library'));
 import { autoSyncHealth, isNative } from './health/health';
 import { PullToRefresh } from './components/PullToRefresh';
 
@@ -51,6 +51,7 @@ export default function App() {
     <div className="mx-auto flex min-h-full max-w-lg flex-col">
       <main className="flex-1 px-4 pb-28 pt-[calc(1rem+env(safe-area-inset-top))]">
         <PullToRefresh enabled={isNative() && settings.healthConnectEnabled} onRefresh={autoSyncHealth}>
+        <Suspense fallback={<div className="p-6 text-muted">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/workout" element={<Workout />} />
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/exercise/:key" element={<ExercisePage />} />
           <Route path="*" element={<Today />} />
         </Routes>
+        </Suspense>
         </PullToRefresh>
       </main>
       <nav

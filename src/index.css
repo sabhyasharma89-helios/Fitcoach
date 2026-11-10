@@ -36,3 +36,18 @@ textarea {
 .num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Light theme (dark is the default). Chosen in More › Appearance. */
+:root[data-theme='light'] {
+  --color-bg: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef2f6;
+  --color-line: #d5dde6;
+  --color-ink: #0f172a;
+  --color-muted: #5b6878;
+  --color-accent: #059669;
+  --color-accent-ink: #ffffff;
+  --color-warn: #b45309;
+  --color-bad: #dc2626;
+  --color-partial: #2563eb;
+}

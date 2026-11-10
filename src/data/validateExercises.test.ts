@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import raw from './exercise-db.json';
+import raw from './exercise-db.json' with { type: 'json' };
 import { validateExercises } from './validateExercises';
 import { CATALOG } from './catalog';
 import { allPlanExerciseKeys } from '../engine/templates';

@@ -1,4 +1,4 @@
-import data from '../data/foods.json';
+import data from '../data/foods.json' with { type: 'json' };
 import type { CustomFood, Nutrients } from '../db/db';
 
 export interface Food {

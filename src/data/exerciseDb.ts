@@ -1,4 +1,4 @@
-import raw from './exercise-db.json';
+import raw from './exercise-db.json' with { type: 'json' };
 import { CATALOG_BY_KEY, type CatalogExercise } from './catalog';
 
 export interface DbExercise {
