@@ -3,6 +3,8 @@ name: Android APK
 on:
   push:
     tags: ['v*']
+    # also: any branch push whose commit message contains [apk]
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -10,6 +12,7 @@ permissions:
 
 jobs:
   apk:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[apk]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
