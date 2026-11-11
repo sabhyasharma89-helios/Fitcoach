@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FitOS</string>
+    <string name="title_activity_main">FitOS</string>
+    <string name="package_name">app.fitos.personal</string>
+    <string name="custom_url_scheme">app.fitos.personal</string>
+    <!-- Shown by Health Connect when you tap "Privacy policy" in its permission screen -->
+    <string name="health_connect_privacy_policy_url">file:///android_asset/public/privacy.html</string>
+</resources>
