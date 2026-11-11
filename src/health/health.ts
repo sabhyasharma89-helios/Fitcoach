@@ -1,5 +1,8 @@
 import { Capacitor } from '@capacitor/core';
-import type { HealthDataType } from '@capgo/capacitor-health';
+// Imported directly. Never return this object from an async function or resolve a promise with it:
+// Capacitor plugin proxies answer *any* property (including `then`), so a promise treats the plugin
+// as a thenable, calls a native "then" method that never replies, and hangs forever.
+import { Health, type AuthorizationStatus, type HealthDataType } from '@capgo/capacitor-health';
 import { db } from '../db/db';
 import { addDaysKey, dayKey, startOfDayISO, todayKey } from '../lib/date';
 
@@ -9,27 +12,59 @@ export const isNative = () => Capacitor.isNativePlatform();
 /** Only the Health Connect data FitOS actually reads (matches the permissions in AndroidManifest.xml). */
 export const HEALTH_READ: HealthDataType[] = ['steps', 'weight', 'workouts', 'calories'];
 
-async function plugin() {
-  const { Health } = await import('@capgo/capacitor-health');
-  return Health;
+/** Reject if a native call doesn't answer in time, so the UI never waits forever. */
+export function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${what} did not respond within ${Math.round(ms / 1000)} s.`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
 }
 
 export async function healthAvailability(): Promise<{ available: boolean; reason?: string }> {
   if (!isNative()) return { available: false, reason: 'Health Connect needs the Android app.' };
-  const H = await plugin();
-  return H.isAvailable();
+  return withTimeout(Health.isAvailable(), 10_000, 'Health Connect');
 }
 
-export async function requestHealthAccess() {
-  const H = await plugin();
-  const status = await H.requestAuthorization({ read: HEALTH_READ, write: [] });
+/** What FitOS is currently allowed to read (no dialog). */
+export async function checkHealthAccess(): Promise<AuthorizationStatus> {
+  return withTimeout(Health.checkAuthorization({ read: HEALTH_READ, write: [] }), 15_000, 'Health Connect');
+}
+
+/** Opens the Health Connect permission screen if anything is still missing. */
+export async function requestHealthAccess(): Promise<AuthorizationStatus> {
+  // generous: this waits while you tap through the permission screen
+  const status = await withTimeout(Health.requestAuthorization({ read: HEALTH_READ, write: [] }), 180_000, 'The Health Connect permission screen');
   await db.settings.update('me', { healthConnectEnabled: status.readAuthorized.length > 0 });
   return status;
 }
 
 export async function openHealthSettings() {
-  const H = await plugin();
-  await H.openHealthConnectSettings();
+  await withTimeout(Health.openHealthConnectSettings(), 10_000, 'Health Connect settings');
+}
+
+/** Connect flow with a visible step-by-step status. */
+export async function connectHealth(onStep: (msg: string) => void): Promise<string> {
+  onStep('Checking Health Connect is available…');
+  const a = await healthAvailability();
+  if (!a.available) return `Health Connect is not available: ${a.reason ?? 'unknown reason'}.`;
+  onStep('Opening the Health Connect permission screen…');
+  const st = await requestHealthAccess();
+  if (!st.readAuthorized.length) {
+    return 'No access was granted. Tap "Open Health Connect permissions", choose FitOS, and turn on Steps, Weight, Exercise and Active calories burned. Then come back and tap Sync now.';
+  }
+  onStep('Syncing the last 30 days…');
+  const r = await syncHealth();
+  const denied = st.readDenied.length ? ` Not allowed yet: ${st.readDenied.join(', ')}.` : '';
+  return `Connected. Synced ${r.stepsDays} days of steps, ${r.weights} weights, ${r.workouts} exercise sessions.${denied}${r.errors.length ? ' ' + r.errors.join(' ') : ''}`;
 }
 
 export interface SyncResult {
@@ -41,7 +76,7 @@ export interface SyncResult {
 
 /** Today plus the last 30 days: daily step totals (aggregated), weights, exercise sessions, active kcal. */
 export async function syncHealth(days = 30): Promise<SyncResult> {
-  const H = await plugin();
+  const H = Health;
   const today = todayKey();
   const from = addDaysKey(today, -days);
   const startDate = startOfDayISO(from);
@@ -49,7 +84,7 @@ export async function syncHealth(days = 30): Promise<SyncResult> {
   const res: SyncResult = { stepsDays: 0, weights: 0, workouts: 0, errors: [] };
 
   try {
-    const { samples } = await H.queryAggregated({ dataType: 'steps', startDate, endDate, bucket: 'day', aggregation: 'sum' });
+    const { samples } = await withTimeout(H.queryAggregated({ dataType: 'steps', startDate, endDate, bucket: 'day', aggregation: 'sum' }), 30_000, 'Health Connect');
     const rows = samples.map((s) => ({ date: dayKey(new Date(s.startDate)), count: Math.round(s.value), source: 'healthconnect' as const }));
     await db.transaction('rw', db.steps, async () => {
       for (const r of rows) {
@@ -64,7 +99,7 @@ export async function syncHealth(days = 30): Promise<SyncResult> {
   }
 
   try {
-    const { samples } = await H.readSamples({ dataType: 'weight', startDate, endDate, limit: 500, ascending: true });
+    const { samples } = await withTimeout(H.readSamples({ dataType: 'weight', startDate, endDate, limit: 500, ascending: true }), 30_000, 'Health Connect');
     await db.transaction('rw', db.weights, async () => {
       for (const s of samples) {
         const date = dayKey(new Date(s.startDate));
@@ -79,7 +114,7 @@ export async function syncHealth(days = 30): Promise<SyncResult> {
   }
 
   try {
-    const { workouts } = await H.queryWorkouts({ startDate, endDate, limit: 200 });
+    const { workouts } = await withTimeout(H.queryWorkouts({ startDate, endDate, limit: 200 }), 30_000, 'Health Connect');
     await db.externalWorkouts.bulkPut(
       workouts.map((w) => ({
         id: w.platformId ?? `${w.startDate}-${w.workoutType}`,
@@ -96,7 +131,7 @@ export async function syncHealth(days = 30): Promise<SyncResult> {
   }
 
   try {
-    const { samples } = await H.queryAggregated({ dataType: 'calories', startDate, endDate, bucket: 'day', aggregation: 'sum' });
+    const { samples } = await withTimeout(H.queryAggregated({ dataType: 'calories', startDate, endDate, bucket: 'day', aggregation: 'sum' }), 30_000, 'Health Connect');
     await db.activeEnergy.bulkPut(samples.map((s) => ({ date: dayKey(new Date(s.startDate)), kcal: Math.round(s.value) })));
   } catch (e) {
     res.errors.push(`Active calories: ${String((e as Error)?.message ?? e)}`);
@@ -106,13 +141,18 @@ export async function syncHealth(days = 30): Promise<SyncResult> {
   return res;
 }
 
-/** Called on app open: sync quietly if the user has connected Health Connect. */
+/**
+ * Called on app open / return to the app: sync quietly if FitOS has access — including access
+ * you granted directly in Health Connect's own settings.
+ */
 export async function autoSyncHealth() {
   if (!isNative()) return;
-  const s = await db.settings.get('me');
-  if (!s?.healthConnectEnabled) return;
   try {
-    await syncHealth();
+    const st = await checkHealthAccess();
+    const enabled = st.readAuthorized.length > 0;
+    const s = await db.settings.get('me');
+    if (s && s.healthConnectEnabled !== enabled) await db.settings.update('me', { healthConnectEnabled: enabled });
+    if (enabled) await syncHealth();
   } catch {
     /* shown on the Settings screen when the user syncs manually */
   }
