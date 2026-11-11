@@ -5,13 +5,13 @@ import { db, type Settings } from '../db/db';
 import { exportBackup, importBackup, backupDue } from '../db/backup';
 import { ACTIVITY_LEVELS, ageFrom, calorieTarget, mifflinStJeor, activityFactor, proteinTarget, FIBRE_TARGET_G, type ActivityId } from '../engine/nutrition';
 import type { DayType, SlotMinutes } from '../engine/types';
-import { todayKey, WEEKDAYS, formatDay } from '../lib/date';
+import { todayKey, WEEKDAYS } from '../lib/date';
 import { fmtInt } from '../lib/format';
 import { EXERCISE_DB_SOURCE } from '../data/exerciseDb';
 import { FOOD_SOURCES } from '../food/foods';
 import { Button, Card, Field, H1, H2, Notice, Segmented, inputCls } from '../components/ui';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
-import { healthAvailability, isNative, openHealthSettings, requestHealthAccess, syncHealth } from '../health/health';
+import { connectHealth, isNative, openHealthSettings } from '../health/health';
 
 export default function More() {
   const s = useLiveQuery(() => db.settings.get('me'), []);
@@ -167,15 +167,18 @@ function Schedule({ s }: { s: Settings }) {
 
 function HealthConnect({ s }: { s: Settings }) {
   const [msg, setMsg] = useState<string | null>(null);
+  const [step, setStep] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<string>) => {
     setBusy(true);
+    setMsg(null);
     try {
       setMsg(await fn());
     } catch (e) {
-      setMsg(String((e as Error).message ?? e));
+      setMsg(`Something went wrong: ${String((e as Error)?.message ?? e)} Try "Open Health Connect permissions" below.`);
     } finally {
       setBusy(false);
+      setStep(null);
     }
   };
   return (
@@ -183,35 +186,22 @@ function HealthConnect({ s }: { s: Settings }) {
       <H2>Samsung Health · Health Connect</H2>
       <p className="mb-3 text-sm text-muted">
         FitOS reads steps, weight, exercise sessions and active calories from Health Connect (where Samsung Health shares them). It never writes anything.
-        {s.lastHealthSyncAt && ` Last sync ${formatDay(todayKey())} at ${new Date(s.lastHealthSyncAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`}
+        {s.lastHealthSyncAt && ` Last sync: ${new Date(s.lastHealthSyncAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`}
       </p>
       <div className="grid gap-2">
-        <Button
-          variant="primary"
-          disabled={busy}
-          onClick={() =>
-            run(async () => {
-              const a = await healthAvailability();
-              if (!a.available) return `Health Connect is not available: ${a.reason ?? 'unknown reason'}.`;
-              const st = await requestHealthAccess();
-              if (!st.readAuthorized.length) return 'No access granted. Open Health Connect settings and allow FitOS.';
-              const r = await syncHealth();
-              return `Connected. Synced ${r.stepsDays} days of steps, ${r.weights} weights, ${r.workouts} exercise sessions.${r.errors.length ? ' ' + r.errors.join(' ') : ''}`;
-            })
-          }
-        >
-          {s.healthConnectEnabled ? 'Sync now' : 'Connect Health Connect'}
+        <Button variant="primary" disabled={busy} onClick={() => run(() => connectHealth(setStep))}>
+          {busy ? 'Working…' : s.healthConnectEnabled ? 'Sync now' : 'Connect Health Connect'}
         </Button>
-        <Button disabled={busy} onClick={() => run(async () => (await openHealthSettings(), 'Opened Health Connect.'))}>
+        <Button onClick={() => run(async () => (await openHealthSettings(), 'In Health Connect: App permissions › FitOS › allow everything, then come back here.'))}>
           Open Health Connect permissions
         </Button>
-        {s.healthConnectEnabled && (
-          <Button variant="ghost" onClick={() => upd({ healthConnectEnabled: false })}>
-            Stop syncing (revoke access in Health Connect too)
-          </Button>
-        )}
       </div>
-      {msg && <p className="mt-2 text-sm">{msg}</p>}
+      {step && <p className="mt-2 text-sm text-muted">{step}</p>}
+      {msg && (
+        <div className="mt-2">
+          <Notice>{msg}</Notice>
+        </div>
+      )}
     </Card>
   );
 }
